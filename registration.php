@@ -1,0 +1,6 @@
+<?php
+
+use Magento\Framework\Component\ComponentRegistrar;
+
+ComponentRegistrar::register(ComponentRegistrar::MODULE, 'Morozov_PgCompat', __DIR__);
+
