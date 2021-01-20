@@ -2,7 +2,7 @@ Postgres Compatibility for Magento
 ========
 
 ### Motivation
-Back in 2010 Magento 1.4->1.6 wa rewritten to have Zend_Select everywhere.\
+Back in 2010 Magento 1.4->1.6 was rewritten to have Zend_Select everywhere.\
 It was done as a project for compatibility with SQL Server and Oracle.\
 Postgres was not in scope at that time. Even after Magento 2 moved to Github, it never came in.\
 Adapter implementation is not there because of its low level and complexity.\
