@@ -14,6 +14,7 @@ use Magento\Framework\DB\LoggerInterface;
 use Magento\Framework\DB\Select;
 use Magento\Framework\DB\SelectFactory;
 use Magento\Framework\DB\Sql\Expression;
+use Magento\Framework\DB\Statement\Parameter;
 use Magento\Framework\Serialize\SerializerInterface;
 use Magento\Framework\Stdlib\DateTime;
 use Magento\Framework\Stdlib\StringUtils;
@@ -38,6 +39,13 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
     protected $exceptionMap;
 
     protected $_cacheAdapter;
+
+    /**
+     * Current Transaction Level
+     *
+     * @var int
+     */
+    protected $_transactionLevel    = 0;
 
     /**
      * Constructor
@@ -516,9 +524,92 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         }
     }
 
+    /**
+     * Prepare value for save in column
+     *
+     * Return converted to column data type value
+     *
+     * @param array $column the column describe array
+     * @param mixed $value
+     * @return mixed
+     *
+     * @SuppressWarnings(PHPMD.CyclomaticComplexity)
+     * @SuppressWarnings(PHPMD.NPathComplexity)
+     */
     public function prepareColumnValue(array $column, $value)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::prepareColumnValue()');
+        if ($value instanceof \Zend_Db_Expr) {
+            return $value;
+        }
+        if ($value instanceof Parameter) {
+            return $value;
+        }
+
+        // return original value if invalid column describe data
+        if (!isset($column['DATA_TYPE'])) {
+            return $value;
+        }
+
+        // return null
+        if ($value === null && $column['NULLABLE']) {
+            return null;
+        }
+
+        switch ($column['DATA_TYPE']) {
+            case 'smallint':
+            case 'int':
+                $value = (int)$value;
+                break;
+            case 'bigint':
+                if (!is_integer($value)) {
+                    $value = sprintf('%.0f', (float)$value);
+                }
+                break;
+
+            case 'decimal':
+                $precision  = 10;
+                $scale      = 0;
+                if (isset($column['SCALE'])) {
+                    $scale = $column['SCALE'];
+                }
+                if (isset($column['PRECISION'])) {
+                    $precision = $column['PRECISION'];
+                }
+                $format = sprintf('%%%d.%dF', $precision - $scale, $scale);
+                $value  = (float)sprintf($format, $value);
+                break;
+
+            case 'float':
+                $value  = (float)sprintf('%F', $value);
+                break;
+
+            case 'date':
+                $value  = $this->formatDate($value, false);
+                break;
+            case 'datetime':
+            case 'timestamp':
+                $value  = $this->formatDate($value);
+                break;
+
+            case 'varchar':
+            case 'mediumtext':
+            case 'text':
+            case 'longtext':
+                $value  = (string)$value;
+                if ($column['NULLABLE'] && $value == '') {
+                    $value = null;
+                }
+                break;
+
+            case 'varbinary':
+            case 'mediumblob':
+            case 'blob':
+            case 'longblob':
+                // No special processing for MySQL is needed
+                break;
+        }
+
+        return $value;
     }
 
     /**
@@ -702,10 +793,8 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         throw new \RuntimeException('Not implemented ' . self::class . '::decodeVarbinary()');
     }
 
-    public function getTransactionLevel()
-    {
-        throw new \RuntimeException('Not implemented ' . self::class . '::getTransactionLevel()');
-    }
+    use Functions\Transaction;
+
 
     public function createTrigger(\Magento\Framework\DB\Ddl\Trigger $trigger)
     {

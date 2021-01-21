@@ -6,4 +6,6 @@
     <preference for="Magento\Framework\DB\Platform\Quote" type="Morozov\PgCompat\DB\PostgresQuote"/>
     <!-- Fix up GET_LOCK() error -->
     <preference for="Magento\Framework\Lock\Backend\Database" type="Magento\Framework\Lock\Backend\Cache" />
+    <!-- Query Compatibility -->
+    <preference for="Magento\AsynchronousOperations\Model\BulkStatus\CalculatedStatusSql" type="Morozov\PgCompat\Compat\AsynchronousOperations\Model\BulkStatus\CalculatedStatusSql" />
 </config>
