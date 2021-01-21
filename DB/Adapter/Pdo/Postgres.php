@@ -11,7 +11,9 @@ use Magento\Framework\DB\Adapter\LockWaitException;
 use Magento\Framework\DB\Adapter\TableNotFoundException;
 use Magento\Framework\DB\Ddl\Table;
 use Magento\Framework\DB\LoggerInterface;
+use Magento\Framework\DB\Select;
 use Magento\Framework\DB\SelectFactory;
+use Magento\Framework\DB\Sql\Expression;
 use Magento\Framework\Serialize\SerializerInterface;
 use Magento\Framework\Stdlib\DateTime;
 use Magento\Framework\Stdlib\StringUtils;
@@ -97,6 +99,31 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
     public function select()
     {
         return $this->selectFactory->create($this);
+    }
+
+
+    /**
+     * Quotes a value and places into a piece of text at a placeholder.
+     *
+     * Method revrited for handle empty arrays in value param
+     *
+     * @param string $text The text with a placeholder.
+     * @param array|null|int|string|float|Expression|Select|\DateTimeInterface $value The value to quote.
+     * @param int|string|null $type OPTIONAL SQL datatype of the given value e.g. Zend_Db::FLOAT_TYPE or "INT"
+     * @param integer $count OPTIONAL count of placeholders to replace
+     * @return string An SQL-safe quoted value placed into the original text.
+     */
+    public function quoteInto($text, $value, $type = null, $count = null)
+    {
+        if (is_array($value) && empty($value)) {
+            $value = new \Zend_Db_Expr('NULL');
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            $value = $value->format('Y-m-d H:i:s');
+        }
+
+        return parent::quoteInto($text, $value, $type, $count);
     }
 
     public function newTable($tableName = null, $schemaName = null)
