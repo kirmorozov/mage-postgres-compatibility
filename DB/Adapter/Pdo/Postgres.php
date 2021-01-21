@@ -18,6 +18,14 @@ use Magento\Framework\Stdlib\StringUtils;
 
 class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 {
+    public const DDL_DESCRIBE          = 1;
+    public const DDL_CREATE            = 2;
+    public const DDL_INDEX             = 3;
+    public const DDL_FOREIGN_KEY       = 4;
+    private const DDL_EXISTS           = 5;
+    public const DDL_CACHE_PREFIX      = 'DB_PDO_MYSQL_DDL';
+    public const DDL_CACHE_TAG         = 'DB_PDO_MYSQL_DDL';
+
     protected $string;
     protected $dateTime;
     protected $logger;
@@ -44,8 +52,7 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         SelectFactory $selectFactory,
         array $config = [],
         SerializerInterface $serializer = null
-    )
-    {
+    ) {
         $this->string = $string;
         $this->dateTime = $dateTime;
         $this->logger = $logger;
@@ -134,7 +141,7 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 
     public function isTableExists($tableName, $schemaName = null)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::isTableExists()');
+        return count($this->query("SELECT 1 FROM pg_tables WHERE tablename = ? ", [$tableName])->fetchAll());
     }
 
     public function showTableStatus($tableName, $schemaName = null)
@@ -194,7 +201,72 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 
     public function getIndexList($tableName, $schemaName = null)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::getIndexList()');
+        $cacheKey = $tableName;
+        $ddl = $this->loadDdlCache($cacheKey, self::DDL_INDEX);
+        if ($ddl === false) {
+            $ddl = [];
+
+            $sql = "select
+                        i.relname as key_name,
+                        case
+                            when ix.indisprimary = true then 'primary'
+                            when ix.indisunique = true then 'unique'
+                            else 'index'
+                        end as index_type,
+                        a.attname as column_name
+                    from
+                        pg_class t,
+                        pg_class i,
+                        pg_index ix,
+                        pg_attribute a
+                    where
+                            t.oid = ix.indrelid
+                      and i.oid = ix.indexrelid
+                      and a.attrelid = t.oid
+                      and a.attnum = ANY(ix.indkey)
+                      and t.relkind = 'r'
+                      and t.relname like ?
+                    order by
+                        t.relname,
+                        i.relname;
+                    ";
+            foreach ($this->fetchAll($sql, [$tableName]) as $row) {
+                $fieldKeyName = 'key_name';
+                $fieldColumn = 'column_name';
+                $fieldIndexType = 'index_type';
+
+                if ($row[$fieldIndexType] == AdapterInterface::INDEX_TYPE_PRIMARY) {
+                    $indexType = AdapterInterface::INDEX_TYPE_PRIMARY;
+                } elseif ($row[$fieldIndexType] == AdapterInterface::INDEX_TYPE_UNIQUE) {
+                    $indexType = AdapterInterface::INDEX_TYPE_UNIQUE;
+                } elseif ($row[$fieldIndexType] == AdapterInterface::INDEX_TYPE_FULLTEXT) {
+                    // TODO: Add FULLTEXT search
+                    $indexType = AdapterInterface::INDEX_TYPE_FULLTEXT;
+                } else {
+                    $indexType = AdapterInterface::INDEX_TYPE_INDEX;
+                }
+
+                $upperKeyName = strtolower($row[$fieldKeyName]);
+                if (isset($ddl[$upperKeyName])) {
+                    $ddl[$upperKeyName]['fields'][] = $row[$fieldColumn]; // for compatible
+                    $ddl[$upperKeyName]['COLUMNS_LIST'][] = $row[$fieldColumn];
+                } else {
+                    $ddl[$upperKeyName] = [
+                        'SCHEMA_NAME' => $schemaName,
+                        'TABLE_NAME' => $tableName,
+                        'KEY_NAME' => $row[$fieldKeyName],
+                        'COLUMNS_LIST' => [$row[$fieldColumn]],
+                        'INDEX_TYPE' => $indexType,
+                        'INDEX_METHOD' => $row[$fieldIndexType],
+                        'type' => strtolower($indexType), // for compatibility
+                        'fields' => [$row[$fieldColumn]], // for compatibility
+                    ];
+                }
+            }
+            $this->saveDdlCache($cacheKey, self::DDL_INDEX, $ddl);
+        }
+
+        return $ddl;
     }
 
     public function addForeignKey($fkName, $tableName, $columnName, $refTableName, $refColumnName, $onDelete = self::FK_ACTION_CASCADE, $purge = false, $schemaName = null, $refSchemaName = null)
@@ -232,9 +304,22 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         throw new \RuntimeException('Not implemented ' . self::class . '::insertForce()');
     }
 
+    /**
+     * Format Date to internal database date format
+     *
+     * @param int|string|\DateTimeInterface $date
+     * @param bool $includeTime
+     * @return \Zend_Db_Expr
+     */
     public function formatDate($date, $includeTime = true)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::formatDate()');
+        $date = $this->dateTime->formatDate($date, $includeTime);
+
+        if ($date === null) {
+            return new \Zend_Db_Expr('NULL');
+        }
+
+        return new \Zend_Db_Expr($this->quote($date));
     }
 
     public function startSetup()
@@ -247,17 +332,159 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         throw new \RuntimeException('Not implemented ' . self::class . '::endSetup()');
     }
 
-    public function setCacheAdapter(\Magento\Framework\Cache\FrontendInterface $cacheAdapter)
-    {
-        $this->_cacheAdapter = $cacheAdapter;
-        return $this;
-    }
-
     use Functions\DDLCache;
 
+    /**
+     * Build SQL statement for condition
+     *
+     * If $condition integer or string - exact value will be filtered ('eq' condition)
+     *
+     * If $condition is array is - one of the following structures is expected:
+     * - array("from" => $fromValue, "to" => $toValue)
+     * - array("eq" => $equalValue)
+     * - array("neq" => $notEqualValue)
+     * - array("like" => $likeValue)
+     * - array("in" => array($inValues))
+     * - array("nin" => array($notInValues))
+     * - array("notnull" => $valueIsNotNull)
+     * - array("null" => $valueIsNull)
+     * - array("gt" => $greaterValue)
+     * - array("lt" => $lessValue)
+     * - array("gteq" => $greaterOrEqualValue)
+     * - array("lteq" => $lessOrEqualValue)
+     * - array("finset" => $valueInSet)
+     * - array("nfinset" => $valueNotInSet)
+     * - array("regexp" => $regularExpression)
+     * - array("seq" => $stringValue)
+     * - array("sneq" => $stringValue)
+     *
+     * If non matched - sequential array is expected and OR conditions
+     * will be built using above mentioned structure
+     *
+     * @param string $fieldName
+     * @param integer|string|array $condition
+     * @return string
+     * @SuppressWarnings(PHPMD.CyclomaticComplexity)
+     */
     public function prepareSqlCondition($fieldName, $condition)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::prepareSqlCondition()');
+        $conditionKeyMap = [
+            'eq' => "{{fieldName}} = ?",
+            'neq' => "{{fieldName}} != ?",
+            'like' => "{{fieldName}} LIKE ?",
+            'nlike' => "{{fieldName}} NOT LIKE ?",
+            'in' => "{{fieldName}} IN(?)",
+            'nin' => "{{fieldName}} NOT IN(?)",
+            'is' => "{{fieldName}} IS ?",
+            'notnull' => "{{fieldName}} IS NOT NULL",
+            'null' => "{{fieldName}} IS NULL",
+            'gt' => "{{fieldName}} > ?",
+            'lt' => "{{fieldName}} < ?",
+            'gteq' => "{{fieldName}} >= ?",
+            'lteq' => "{{fieldName}} <= ?",
+            'finset' => "? = ANY (string_to_array({{fieldName}},','))",
+            'nfinset' => "NOT( ? = ANY (string_to_array({{fieldName}},',')))",
+            'regexp' => "{{fieldName}} REGEXP ?", //  TODO: implement REGEXP search
+            'from' => "{{fieldName}} >= ?",
+            'to' => "{{fieldName}} <= ?",
+            'seq' => null,
+            'sneq' => null,
+            'ntoa' => "INET_NTOA({{fieldName}}) LIKE ?", // TODO: implement INET_NTOA
+        ];
+
+        $query = '';
+        if (is_array($condition)) {
+            $key = key(array_intersect_key($condition, $conditionKeyMap));
+
+            if (isset($condition['from']) || isset($condition['to'])) {
+                if (isset($condition['from'])) {
+                    $from = $this->_prepareSqlDateCondition($condition, 'from');
+                    $query = $this->_prepareQuotedSqlCondition($conditionKeyMap['from'], $from, $fieldName);
+                }
+
+                if (isset($condition['to'])) {
+                    $query .= empty($query) ? '' : ' AND ';
+                    $to = $this->_prepareSqlDateCondition($condition, 'to');
+                    $query = $query . $this->_prepareQuotedSqlCondition($conditionKeyMap['to'], $to, $fieldName);
+                }
+            } elseif (array_key_exists($key, $conditionKeyMap)) {
+                $value = $condition[$key];
+                if (($key == 'seq') || ($key == 'sneq')) {
+                    $key = $this->_transformStringSqlCondition($key, $value);
+                }
+                if (($key == 'in' || $key == 'nin') && is_string($value)) {
+                    $value = explode(',', $value);
+                }
+                $query = $this->_prepareQuotedSqlCondition($conditionKeyMap[$key], $value, $fieldName);
+            } else {
+                $queries = [];
+                foreach ($condition as $orCondition) {
+                    $queries[] = sprintf('(%s)', $this->prepareSqlCondition($fieldName, $orCondition));
+                }
+
+                $query = sprintf('(%s)', implode(' OR ', $queries));
+            }
+        } else {
+            $query = $this->_prepareQuotedSqlCondition($conditionKeyMap['eq'], (string)$condition, $fieldName);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Prepare Sql condition
+     *
+     * @param string $text Condition value
+     * @param mixed $value
+     * @param string $fieldName
+     * @return string
+     */
+    protected function _prepareQuotedSqlCondition($text, $value, $fieldName)
+    {
+        $sql = $this->quoteInto($text, $value);
+        $sql = str_replace('{{fieldName}}', $fieldName, $sql);
+        return $sql;
+    }
+
+    /**
+     * Prepare sql date condition
+     *
+     * @param array $condition
+     * @param string $key
+     * @return string
+     */
+    protected function _prepareSqlDateCondition($condition, $key)
+    {
+        if (empty($condition['date'])) {
+            if (empty($condition['datetime'])) {
+                $result = $condition[$key];
+            } else {
+                $result = $this->formatDate($condition[$key]);
+            }
+        } else {
+            $result = $this->formatDate($condition[$key]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Transforms sql condition key 'seq' / 'sneq' that is used for comparing string values to its analog:
+     * - 'null' / 'notnull' for empty strings
+     * - 'eq' / 'neq' for non-empty strings
+     *
+     * @param string $conditionKey
+     * @param mixed $value
+     * @return string
+     */
+    protected function _transformStringSqlCondition($conditionKey, $value)
+    {
+        $value = (string)$value;
+        if ($value == '') {
+            return ($conditionKey == 'seq') ? 'null' : 'notnull';
+        } else {
+            return ($conditionKey == 'seq') ? 'eq' : 'neq';
+        }
     }
 
     public function prepareColumnValue(array $column, $value)
@@ -265,9 +492,23 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         throw new \RuntimeException('Not implemented ' . self::class . '::prepareColumnValue()');
     }
 
-    public function getCheckSql($condition, $true, $false)
+    /**
+     * Generate fragment of SQL, that check condition and return true or false value
+     *
+     * @param \Zend_Db_Expr|\Magento\Framework\DB\Select|string $expression
+     * @param string $true true value
+     * @param string $false false value
+     * @return \Zend_Db_Expr
+     */
+    public function getCheckSql($expression, $true, $false)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::getCheckSql()');
+        if ($expression instanceof \Zend_Db_Expr || $expression instanceof \Zend_Db_Select) {
+            $expression = sprintf("CASE WHEN (%s) THEN %s ELSE %s END", $expression, $true, $false);
+        } else {
+            $expression = sprintf("CASE WHEN %s THEN %s ELSE %s END", $expression, $true, $false);
+        }
+
+        return new \Zend_Db_Expr($expression);
     }
 
     public function getIfNullSql($expression, $value = 0)
@@ -407,7 +648,12 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 
     public function getPrimaryKeyName($tableName, $schemaName = null)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::getPrimaryKeyName()');
+        $indexes = $this->getIndexList($tableName, $schemaName);
+        $data = array_filter($indexes, function ($x) {
+            return $x['INDEX_TYPE'] == 'primary';
+        });
+        $mainKey = reset($data);
+        return $mainKey['KEY_NAME'];
     }
 
     public function decodeVarbinary($value)

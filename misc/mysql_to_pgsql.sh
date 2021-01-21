@@ -4,6 +4,7 @@
 echo "drop database m2_core_std; create database m2_core_std;" | mysql -h127.0.0.1 -u root -p123123qa
 mysqldump -h 127.0.0.1 -u root -p123123qa m2_core | \
     sed 's/ unsigned / /g' | \
+    sed 's/ tinyint(1) / tinyint /g' | \
     sed 's/KEY `EAV_ATTRIBUTE_FRONTEND_INPUT_ENTITY_TYPE_ID_IS_USER_DEFINED/KEY `EAV_ATTR_FRONTEND_INPUT_IS_USER_DEFINED/g' | \
     sed 's/KEY `EAV_ATTRIBUTE_GROUP_ATTRIBUTE_/KEY `EAV_ATTR_GRP_ATTR_/g' | \
     sed 's/KEY `CMS_PAGE_TITLE_META_KEYWORDS_META_DESCRIPTION_IDENTIFIER_CONTENT/KEY `CMS_PAGE_TITLE_META_DESCR_ID_CONTENT/g' | \

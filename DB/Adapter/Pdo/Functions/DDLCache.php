@@ -4,6 +4,11 @@ namespace Morozov\PgCompat\DB\Adapter\Pdo\Functions;
 
 trait DDLCache
 {
+    public function setCacheAdapter(\Magento\Framework\Cache\FrontendInterface $cacheAdapter)
+    {
+        $this->_cacheAdapter = $cacheAdapter;
+        return $this;
+    }
 
     public function allowDdlCache()
     {
@@ -22,11 +27,13 @@ trait DDLCache
 
     public function saveDdlCache($tableCacheKey, $ddlType, $data)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::saveDdlCache()');
+        // Todo: add implementation
+        return $this;
     }
 
     public function loadDdlCache($tableCacheKey, $ddlType)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::loadDdlCache()');
+        // Todo: add implementation
+        return false;
     }
 }
