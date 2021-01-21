@@ -20,6 +20,8 @@ use Magento\Framework\Stdlib\StringUtils;
 
 class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 {
+    use Functions\Fixes;
+
     public const DDL_DESCRIBE          = 1;
     public const DDL_CREATE            = 2;
     public const DDL_INDEX             = 3;
@@ -537,10 +539,22 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 
         return new \Zend_Db_Expr($expression);
     }
-
+    /**
+     * Returns valid IFNULL expression
+     *
+     * @param \Zend_Db_Expr|\Magento\Framework\DB\Select|string $expression
+     * @param string|int $value OPTIONAL. Applies when $expression is NULL
+     * @return \Zend_Db_Expr
+     */
     public function getIfNullSql($expression, $value = 0)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::getIfNullSql()');
+        if ($expression instanceof \Zend_Db_Expr || $expression instanceof \Zend_Db_Select) {
+            $expression = sprintf("COALESCE((%s), %s)", $expression, $value);
+        } else {
+            $expression = sprintf("COALESCE(%s, %s)", $expression, $value);
+        }
+
+        return new \Zend_Db_Expr($expression);
     }
 
     public function getConcatSql(array $data, $separator = null)
@@ -712,4 +726,6 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
     {
         throw new \RuntimeException('Not implemented ' . self::class . '::getAutoIncrementField()');
     }
+
+
 }
