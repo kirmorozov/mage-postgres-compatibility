@@ -6,30 +6,39 @@ Back in 2010 Magento 1.4->1.6 was rewritten to have Zend_Select everywhere.\
 It was done as a project for compatibility with SQL Server and Oracle.\
 Postgres was not in scope at that time. Even after Magento 2 moved to Github, it never came in.\
 Adapter implementation is not there because of its low level and complexity.\
-So this module provides baseline for further development.
+So this module provides baseline for further development.\
+
+There were updates to Magento 2 that made some part incompatible but legacy of 2010 is still there.
 
 ### Current state of implementation
 
 Current state is a `proof of concept`.\
 At this moment `bin/magento` works with some commands, \
 like `store:list`,`store:website:list`,`config:show`.
+Login into admin works, homepage works, CMS Editing works.
 Basic CRUD suppose to work fine. 
 
 ### Pain points
+DDL Cache (It used Redis) \ 
+Identities and autoincrements.\
+Insert on duplicate.\
+Fancy catalog collectiongetSize();
+EAV Unions. \
 Indexers and Reports.\
 Magento relies on custom implementation of Material Views for Mysql.\
-Time Zone, database uses GMT.
+Time Zone, database uses GMT.\
+Functions that do not exist in Postgres.\
 
 
 ### Make it work
 
 1. Use script misc/mysql_to_pgsql.sh as an example for migration of your database.
 2. Use patch misc/app_etc_di.patch to patch app/etc/di.xml (until you enable module)
-3. Change app/etc/env.php
-4. Enjoy.
-5. Fix  'Not implemented Morozov\PgCompat\DB\Adapter\Pdo\Postgres...' exception.
-6. Go to 4 :)
-
+3. Apply some patches to the core from [Postgres Compatibility Branch](https://github.com/kirmorozov/magento2/tree/2.4-postgres-compatibility)
+4. Change app/etc/env.php
+5. Enjoy.
+6. Fix  'Not implemented Morozov\PgCompat\DB\Adapter\Pdo\Postgres...' exception.
+7. Go to 4 :)
 
 
 ### License
