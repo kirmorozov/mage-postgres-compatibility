@@ -23,13 +23,13 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 {
     use Functions\Fixes;
 
-    public const DDL_DESCRIBE          = 1;
-    public const DDL_CREATE            = 2;
-    public const DDL_INDEX             = 3;
-    public const DDL_FOREIGN_KEY       = 4;
-    private const DDL_EXISTS           = 5;
-    public const DDL_CACHE_PREFIX      = 'DB_PDO_MYSQL_DDL';
-    public const DDL_CACHE_TAG         = 'DB_PDO_MYSQL_DDL';
+    public const DDL_DESCRIBE = 1;
+    public const DDL_CREATE = 2;
+    public const DDL_INDEX = 3;
+    public const DDL_FOREIGN_KEY = 4;
+    private const DDL_EXISTS = 5;
+    public const DDL_CACHE_PREFIX = 'DB_PDO_MYSQL_DDL';
+    public const DDL_CACHE_TAG = 'DB_PDO_MYSQL_DDL';
 
     protected $string;
     protected $dateTime;
@@ -45,7 +45,7 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
      *
      * @var int
      */
-    protected $_transactionLevel    = 0;
+    protected $_transactionLevel = 0;
 
     /**
      * Constructor
@@ -64,7 +64,8 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         SelectFactory $selectFactory,
         array $config = [],
         SerializerInterface $serializer = null
-    ) {
+    )
+    {
         $this->string = $string;
         $this->dateTime = $dateTime;
         $this->logger = $logger;
@@ -110,7 +111,6 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
     {
         return $this->selectFactory->create($this);
     }
-
 
     /**
      * Quotes a value and places into a piece of text at a placeholder.
@@ -323,7 +323,68 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 
     public function insertOnDuplicate($table, array $data, array $fields = [])
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::insertOnDuplicate()');
+        $indexes = array_filter($this->getIndexList($table), function ($idx) {
+            return in_array($idx['INDEX_TYPE'], [AdapterInterface::INDEX_TYPE_PRIMARY, AdapterInterface::INDEX_TYPE_UNIQUE]);
+        });
+        $cols = [];
+        $vals = "";
+        if (is_array(reset($data))) {
+            $cols = array_keys($data[0]);
+            $vals = implode(
+                '), (',
+                array_map(function ($row) {
+                    return implode(', ', array_map(function ($val) {
+                        return $this->quote($val);
+                    }, $row));
+                }, $data)
+            );
+        } else {
+            $cols = array_keys($data);
+            $vals = implode(', ', array_map(function ($val) {
+                return $this->quote($val);
+            }, $data));
+        }
+
+        if (empty($fields)) {
+            $fields = $cols;
+        }
+
+        $sql = "INSERT INTO "
+            . $this->quoteIdentifier($table, true) . ' as _tgt'
+            . ' (' . implode(', ', $cols) . ') '
+            . ' VALUES (' . $vals . ')';
+
+        foreach ($indexes as $index) {
+            $condition = array_map(function ($col) {
+                return $this->quoteIdentifier($col);
+            }, $index['COLUMNS_LIST']);
+            $sql .= "\n ON CONFLICT (" . implode(', ', $condition) . ") ";
+            $updateExprs = [];
+            foreach ($fields as $k => $v) {
+                if (!is_numeric($k)) {
+                    $field = $this->quoteIdentifier($k);
+                    if ($v instanceof \Zend_Db_Expr) {
+                        $value = '_tgt.' . $v->__toString();
+                    } elseif ($v instanceof \Laminas\Db\Sql\Expression) {
+                        $value = '_tgt.' . $v->getExpression();
+                    } elseif (is_string($v)) {
+                        $value = 'excluded.' . $this->quoteIdentifier($v);
+                    } elseif (is_numeric($v)) {
+                        $value = $this->quoteInto('?', $v);
+                    }
+                } elseif (is_string($v)) {
+                    $value = "excluded.{$this->quoteIdentifier($v)}";
+                    $field = $this->quoteIdentifier($v);
+                }
+                if ($field && is_string($value) && $value !== '') {
+                    $updateExprs[] = "$field = $value";
+                }
+            }
+            $sql .= "DO UPDATE SET " . implode(', ', $updateExprs);
+        }
+
+        $res = $this->query($sql);
+        return $res->rowCount();
     }
 
     public function insertMultiple($table, array $data)
@@ -567,8 +628,8 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
                 break;
 
             case 'decimal':
-                $precision  = 10;
-                $scale      = 0;
+                $precision = 10;
+                $scale = 0;
                 if (isset($column['SCALE'])) {
                     $scale = $column['SCALE'];
                 }
@@ -576,26 +637,26 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
                     $precision = $column['PRECISION'];
                 }
                 $format = sprintf('%%%d.%dF', $precision - $scale, $scale);
-                $value  = (float)sprintf($format, $value);
+                $value = (float)sprintf($format, $value);
                 break;
 
             case 'float':
-                $value  = (float)sprintf('%F', $value);
+                $value = (float)sprintf('%F', $value);
                 break;
 
             case 'date':
-                $value  = $this->formatDate($value, false);
+                $value = $this->formatDate($value, false);
                 break;
             case 'datetime':
             case 'timestamp':
-                $value  = $this->formatDate($value);
+                $value = $this->formatDate($value);
                 break;
 
             case 'varchar':
             case 'mediumtext':
             case 'text':
             case 'longtext':
-                $value  = (string)$value;
+                $value = (string)$value;
                 if ($column['NULLABLE'] && $value == '') {
                     $value = null;
                 }
@@ -630,6 +691,7 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 
         return new \Zend_Db_Expr($expression);
     }
+
     /**
      * Returns valid IFNULL expression
      *
@@ -703,9 +765,29 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         throw new \RuntimeException('Not implemented ' . self::class . '::getDateExtractSql()');
     }
 
+    /**
+     * Generates case SQL fragment
+     *
+     * Generate fragment of SQL, that check value against multiple condition cases
+     * and return different result depends on them
+     *
+     * @param string $valueName Name of value to check
+     * @param array $casesResults Cases and results
+     * @param string $defaultValue value to use if value doesn't confirm to any cases
+     * @return \Zend_Db_Expr
+     */
     public function getCaseSql($valueName, $casesResults, $defaultValue = null)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::getCaseSql()');
+        $expression = 'CASE ' . $valueName;
+        foreach ($casesResults as $case => $result) {
+            $expression .= ' WHEN ' . $case . ' THEN ' . $result;
+        }
+        if ($defaultValue !== null) {
+            $expression .= ' ELSE ' . $defaultValue;
+        }
+        $expression .= ' END';
+
+        return new \Zend_Db_Expr($expression);
     }
 
     public function getTableName($tableName)
@@ -795,7 +877,6 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 
     use Functions\Transaction;
 
-
     public function createTrigger(\Magento\Framework\DB\Ddl\Trigger $trigger)
     {
         throw new \RuntimeException('Not implemented ' . self::class . '::createTrigger()');
@@ -815,6 +896,4 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
     {
         throw new \RuntimeException('Not implemented ' . self::class . '::getAutoIncrementField()');
     }
-
-
 }
