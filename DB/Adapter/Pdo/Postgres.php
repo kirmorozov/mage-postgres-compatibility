@@ -903,8 +903,21 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         throw new \RuntimeException('Not implemented ' . self::class . '::getTables()');
     }
 
+    /**
+     * Returns auto increment field if exists
+     *
+     * @param string $tableName
+     * @param string|null $schemaName
+     * @return string|bool
+     * @since 100.1.0
+     */
     public function getAutoIncrementField($tableName, $schemaName = null)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::getAutoIncrementField()');
+        $indexName = $this->getPrimaryKeyName($tableName, $schemaName);
+        $indexes = $this->getIndexList($tableName);
+        if ($indexName && count($indexes[$indexName]['COLUMNS_LIST']) == 1) {
+            return current($indexes[$indexName]['COLUMNS_LIST']);
+        }
+        return false;
     }
 }
