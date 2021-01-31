@@ -41,6 +41,7 @@ foreach ($lines as $line) {
     }
 }
 $seqs [] = ['table' => 'shipping_tablerate', 'col' => 'pk', 'schema' => $seqs[0]['schema']];
+$seqs [] = ['table' => 'quote_id_mask', 'col' => 'entity_id', 'schema' => $seqs[0]['schema']];
 
 foreach ($seqs as $seq) {
     $maxValSQL = "select max({$seq['col']}) as mx, count(1) as cnt from {$seq['table']} ";

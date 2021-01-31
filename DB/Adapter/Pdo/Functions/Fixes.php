@@ -102,6 +102,11 @@ trait Fixes
                 $primaryPosition = array_search($row[$attnum], explode(',', $row[$conkey])) + 1;
                 $identity = (bool) (preg_match('/^nextval/', $row[$default_value]));
             }
+
+            if ($row[$type] == 'int2' || $row[$type] == 'int4') {
+                $row[$type] = 'smallint';
+            }
+
             $desc[$this->foldCase($row[$colname])] = array(
                 'SCHEMA_NAME'      => $this->foldCase($row[$nspname]),
                 'TABLE_NAME'       => $this->foldCase($row[$relname]),

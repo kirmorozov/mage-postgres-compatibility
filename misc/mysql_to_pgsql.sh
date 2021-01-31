@@ -18,7 +18,7 @@ mysqldump -h 127.0.0.1 -u root -p123123qa m2_core | \
     mysql -h 127.0.0.1 -u root -p123123qa m2_core_std
 
 echo "alter table captcha_log modify type smallint default 0 not null comment 'Type';" | mysql -h127.0.0.1 -u root -p123123qa m2_core_std
-
+echo "alter table ui_bookmark alter column current set default 0;" | mysql -h127.0.0.1 -u root -p123123qa m2_core_std
 
 docker run --rm --name pgloader dimitri/pgloader:latest \
-pgloader mysql://root:123123qa@172.17.0.3:3306/m2_core_std postgresql://m2_core:123123qa@172.17.0.5:5432/m2_core
+pgloader mysql://root:123123qa@172.17.0.2:3306/m2_core_std postgresql://m2_core:123123qa@172.17.0.5:5432/m2_core
