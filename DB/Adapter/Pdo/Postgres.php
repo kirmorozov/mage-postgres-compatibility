@@ -722,7 +722,18 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 
     public function getLeastSql(array $data)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::getLeastSql()');
+        return new \Zend_Db_Expr('LEAST(' . implode(', ', $data) . ')');
+    }
+
+    public function getFieldSql($field, array $sequence)
+    {
+        $sql = "CASE ";
+        foreach ($sequence as $i => $v) {
+            $sql .= "WHEN $field = $v THEN $i ";
+        }
+        $sql .= " END";
+
+        return new \Zend_Db_Expr($sql);
     }
 
     public function getGreatestSql(array $data)
