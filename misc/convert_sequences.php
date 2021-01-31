@@ -35,6 +35,8 @@ foreach ($lines as $line) {
     }
 }
 $seqs [] = ['table' => 'shipping_tablerate', 'col' => 'pk', 'schema' => $seqs[0]['schema']];
+$seqs [] = ['table' => 'core_config_data', 'col' => 'config_id', 'schema' => $seqs[0]['schema']];
+
 foreach ($seqs as $seq) {
     $maxValSQL = "select max({$seq['col']}) as mx, count(1) as cnt from {$seq['table']} ";
     $r1 = $pdo->query($maxValSQL);
