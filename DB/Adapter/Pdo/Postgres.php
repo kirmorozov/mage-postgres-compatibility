@@ -387,14 +387,36 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         return $res->rowCount();
     }
 
+    /**
+     * Inserts a table multiply rows with specified data.
+     *
+     * @param string|array|\Zend_Db_Expr $table The table to insert data into.
+     * @param array $data Column-value pairs or array of Column-value pairs.
+     * @return int The number of affected rows.
+     * @throws \Zend_Db_Exception
+     */
     public function insertMultiple($table, array $data)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::insertMultiple()');
+        $row = reset($data);
+        // support insert syntaxes
+        if (!is_array($row)) {
+            return $this->insert($table, $data);
+        }
+
+        $res = 0;
+        foreach ($data as $row) {
+            $res +=$this->insert($table, $row);
+        }
+        return $res;
     }
 
     public function insertArray($table, array $columns, array $data)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::insertArray()');
+        $res = 0;
+        foreach ($data as $row) {
+            $res += $this->insert($table, array_combine($columns, $row));
+        }
+        return $res;
     }
 
     public function insertForce($table, array $bind)
