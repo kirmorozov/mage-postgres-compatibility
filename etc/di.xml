@@ -2,10 +2,13 @@
 
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
-    <preference for="Magento\Framework\App\ResourceConnection\ConnectionAdapterInterface" type="Morozov\PgCompat\DB\Postgres"/>
+    <preference for="Magento\Framework\App\ResourceConnection\ConnectionAdapterInterface"
+                type="Morozov\PgCompat\DB\Postgres"/>
     <preference for="Magento\Framework\DB\Platform\Quote" type="Morozov\PgCompat\DB\PostgresQuote"/>
+    <preference for="Magento\SalesSequence\Model\Sequence" type="Morozov\PgCompat\DB\Model\Sequence"/>
     <!-- Fix up GET_LOCK() error -->
-    <preference for="Magento\Framework\Lock\Backend\Database" type="Magento\Framework\Lock\Backend\Cache" />
+    <preference for="Magento\Framework\Lock\Backend\Database" type="Magento\Framework\Lock\Backend\Cache"/>
     <!-- Query Compatibility -->
-    <preference for="Magento\AsynchronousOperations\Model\BulkStatus\CalculatedStatusSql" type="Morozov\PgCompat\Compat\AsynchronousOperations\Model\BulkStatus\CalculatedStatusSql" />
+    <preference for="Magento\AsynchronousOperations\Model\BulkStatus\CalculatedStatusSql"
+                type="Morozov\PgCompat\Compat\AsynchronousOperations\Model\BulkStatus\CalculatedStatusSql"/>
 </config>

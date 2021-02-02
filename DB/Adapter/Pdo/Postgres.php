@@ -732,9 +732,19 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
         return new \Zend_Db_Expr($expression);
     }
 
+    /**
+     * Generate fragment of SQL, that combine together (concatenate) the results from data array
+     *
+     * All arguments in data must be quoted
+     *
+     * @param string[] $data
+     * @param string $separator concatenate with separator
+     * @return \Zend_Db_Expr
+     */
     public function getConcatSql(array $data, $separator = null)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::getConcatSql()');
+        $format = empty($separator) ? 'CONCAT(%s)' : "CONCAT_WS('{$separator}', %s)";
+        return new \Zend_Db_Expr(sprintf($format, implode(', ', $data)));
     }
 
     public function getLengthSql($string)
@@ -860,7 +870,9 @@ class Postgres extends \Zend_Db_Adapter_Pdo_Pgsql implements AdapterInterface
 
     public function insertFromSelect(\Magento\Framework\DB\Select $select, $table, array $fields = [], $mode = false)
     {
-        throw new \RuntimeException('Not implemented ' . self::class . '::insertFromSelect()');
+        $sql =  "INSERT INTO {$table} (" . implode(', ', $fields) . ")" . $select;
+        // TODO: Handle empty fields, and mode On_duplicate;
+        return $sql;
     }
 
     public function updateFromSelect(\Magento\Framework\DB\Select $select, $table)

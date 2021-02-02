@@ -66,4 +66,24 @@ foreach ($seqs as $seq) {
 }
 
 
+$res = $pdo->query("select * from pg_catalog.pg_tables where tablename like 'sequence_%';");
+
+foreach ($res->fetchAll(\PDO::FETCH_ASSOC) as $seq) {
+    $maxValSQL = "select max(sequence_value) as mx from {$seq['tablename']};";
+    $r1 = $pdo->query($maxValSQL);
+    $r = $r1->fetchAll(\PDO::FETCH_ASSOC);
+    $mx = 0;
+    if (count($r)) {
+        $mx = $r[0]['mx'];
+    }
+
+    $createSql = "create sequence {$seq['tablename']} ";
+    if ($mx) {
+        $mx++;
+        $createSql .= " start with {$mx}";
+    }
+    $r0 = $pdo->query("DROP TABLE {$seq['schemaname']}.{$seq['tablename']};");
+    $r1 = $pdo->query($createSql);
+
+}
 
