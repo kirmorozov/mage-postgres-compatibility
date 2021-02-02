@@ -12,7 +12,7 @@ There were updates to Magento 2 that made some part incompatible but legacy of 2
 
 ### Current state of implementation
 
-Current state is a `proof of concept` and add to cart works!!!.\
+Current state is a `proof of concept` and checkout with simple products works.\
 At this moment `bin/magento` works with some commands, \
 like `store:list`,`store:website:list`,`config:show`.\
 Login into admin works, homepage works, CMS Editing works.\
@@ -22,7 +22,7 @@ Catalog and Cart Rules, visited, but did not check in action.
 Basic CRUD suppose to work fine. 
 
 ### Pain points
-[ ] DDL Cache (It used Redis) \ 
+[ ] DDL Cache (It used Redis) \
 [x] Identities and autoincrements.(script in misc)\
 [ ] Insert on duplicate.\
 [x] Fancy catalog collection::getSize(); (`compatibility patch`)
@@ -31,7 +31,7 @@ Basic CRUD suppose to work fine.
 [ ] Magento relies on custom implementation of Material Views for Mysql.\
 [ ] Time Zone, database uses GMT.\
 [ ] Functions that do not exist in Postgres. added `getFieldSql()` with `compatibility patch` for sort calls.\
-
+[x] Replace sequence_% tables with real sequences.
 
 ### Make it work
 
